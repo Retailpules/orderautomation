@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-02-11T07:14:04.986Z",
+  "tests": [
+    {
+      "name": "Multi-SKU Order Creation",
+      "status": "FAIL",
+      "error": "Giga API Error: itemPrice must be provided. (Code: B11001)",
+      "details": {
+        "orderNo": "order_2JLzLoGcA7XLi4yHh3FAjg-TEST-1770794044986",
+        "errorType": "Error",
+        "apiResponse": null
+      }
+    }
+  ]
+}

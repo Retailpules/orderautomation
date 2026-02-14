@@ -1,0 +1,14 @@
+name = "giga-test-worker"
+main = "test-worker.js"
+compatibility_date = "2023-12-01"
+
+[vars]
+GIGA_CLIENT_ID = "83142311_JPN_release"
+GIGA_CLIENT_SECRET = "995ade0b4e544a7aac92902c97a2e0bf"
+GIGA_API_BASE_URL = "https://openapi.gigab2b.com"
+
+# Youge Credentials (Sanyu)
+YOUGE_APP_CODE = "apbhhitm6xica7akck"
+YOUGE_SCHEMA_CODE = "smhdzccpti8vrlyzj0"
+YOUGE_ENGINE_CODE = "c00000000000s4-0"
+YOUGE_BASE_URL = "https://sanyu.cloud"

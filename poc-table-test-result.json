@@ -1,0 +1,15 @@
+[
+  {
+    "orderNo": "order_2JLzLoGcA7XLi4yHh3FAjg-TEST-POC-1770799034479",
+    "status": "SUCCESS",
+    "response": {
+      "success": true,
+      "code": "200",
+      "data": null,
+      "requestId": "d9b6b67644c2a65b",
+      "msg": "success",
+      "subMsg": null,
+      "recommend": "https://www.gigab2b.com/index.php?route=information/open_api/index&doc_id=8"
+    }
+  }
+]

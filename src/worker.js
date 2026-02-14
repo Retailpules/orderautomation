@@ -1,0 +1,337 @@
+const CONSOLE_HTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GIGA Sync Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: 'Inter', -apple-system, sans-serif; background: #f0f2f5; color: #1a1a1a; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 30px; }
+        h1 { margin: 0; color: #0056b3; font-size: 24px; }
+        .badge { background: #e1f0ff; color: #0056b3; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .stat-card { background: #f8fafc; padding: 20px; border-radius: 10px; text-align: center; border: 1px solid #edf2f7; }
+        .stat-value { font-size: 28px; font-weight: 800; color: #2d3748; margin-bottom: 5px; }
+        .stat-label { font-size: 13px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
+        .actions { display: flex; gap: 15px; flex-wrap: wrap; }
+        .btn { padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; font-size: 14px; }
+        .btn-primary { background: #0056b3; color: white; }
+        .btn-primary:hover { background: #004494; transform: translateY(-1px); }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; transform: translateY(-1px); }
+        .btn:disabled { background: #cbd5e0; cursor: not-allowed; transform: none; }
+        #results { margin-top: 40px; }
+        pre { background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; margin-right: 10px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GIGA Sync Console</h1>
+            <span class="badge">V1.1 Patch</span>
+        </header>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="pending-count">-</div>
+                <div class="stat-label">Pending / Error</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="processed-count">-</div>
+                <div class="stat-label">Processed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="completed-count">-</div>
+                <div class="stat-label">Completed</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="total-count">-</div>
+              <div class="stat-label">Total Records</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button id="btn-sync" class="btn btn-primary" onclick="triggerSync('/sync', 'btn-sync')">Trigger Order Sync</button>
+            <button id="btn-shipment" class="btn btn-success" onclick="triggerSync('/sync-shipment', 'btn-shipment')">Trigger Status & Shipment Sync</button>
+        </div>
+
+        <div id="results" style="display:none">
+            <h3 id="result-title">Execution Result</h3>
+            <pre id="result-content"></pre>
+        </div>
+    </div>
+
+    <script>
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/status');
+                const data = await res.json();
+                document.getElementById('pending-count').innerText = (data.pending || 0) + (data.error || 0);
+                document.getElementById('processed-count').innerText = data.processed || 0;
+                document.getElementById('completed-count').innerText = data.completed || 0;
+                document.getElementById('total-count').innerText = data.total || 0;
+            } catch (e) { console.error(e); }
+        }
+
+        async function triggerSync(endpoint, btnId) {
+            const btn = document.getElementById(btnId);
+            const originalText = btn.innerText;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>' + originalText;
+            
+            const resultDiv = document.getElementById('results');
+            const resultContent = document.getElementById('result-content');
+            
+            try {
+                const res = await fetch(endpoint);
+                const data = await res.json();
+                resultDiv.style.display = 'block';
+                resultContent.innerText = JSON.stringify(data, null, 2);
+                await fetchStatus();
+            } catch (e) {
+                resultDiv.style.display = 'block';
+                resultContent.innerText = 'Error: ' + e.message;
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        }
+
+        fetchStatus();
+    </script>
+</body>
+</html>
+`;
+
+async function processOrders(request, env) {
+    const startTime = Date.now();
+    const giga = new GigaClient(env.GIGA_CLIENT_ID, env.GIGA_CLIENT_SECRET, env.GIGA_API_BASE_URL);
+    const youge = new YougeClient(env.YOUGE_APP_TOKEN, env.YOUGE_APP_CODE, env.YOUGE_SCHEMA_CODE, env.YOUGE_ENGINE_CODE, env.YOUGE_BASE_URL);
+
+    const allRecords = await youge.getRawRecords();
+
+    // Filter "Pending" and "Error" for auto-compensation (BRD 23.2)
+    const pendingRecords = allRecords.filter(r => {
+        const status = r[youge.FIELDS.STATUS];
+        return status === 'Pending' || status === 'Error';
+    }).map(r => youge._mapRecord(r));
+
+    if (pendingRecords.length === 0) {
+        return { success: 0, failed: 0, message: "No pending or error orders to process." };
+    }
+
+    // Constraint: Limit to 20 orders per run (BRD 21.1)
+    const uniqueOrderNos = [...new Set(pendingRecords.map(r => r.orderNo))].slice(0, 20);
+    const results = { success: 0, failed: 0, errors: [], message: "" };
+
+    // Grouping logic
+    const ordersMap = {};
+    for (const rec of pendingRecords) {
+        if (!uniqueOrderNos.includes(rec.orderNo)) continue;
+
+        if (!ordersMap[rec.orderNo]) {
+            ordersMap[rec.orderNo] = { header: rec, lines: [], ids: [] };
+        }
+        ordersMap[rec.orderNo].lines.push({
+            sku: rec.sku,
+            qty: rec.qty,
+            orderDetailNo: rec.orderDetailNo || (ordersMap[rec.orderNo].lines.length + 1),
+            itemPrice: rec.itemPrice || 0,
+            currency: 'JPY'
+        });
+        ordersMap[rec.orderNo].ids.push(rec.id);
+    }
+
+    for (const orderNo of Object.keys(ordersMap)) {
+        // Constraint: Check 25s limit (BRD 21.1)
+        if (Date.now() - startTime > 25000) {
+            results.message = "Partial execution. Stopped at 25s limit.";
+            break;
+        }
+
+        const order = ordersMap[orderNo];
+        const h = order.header;
+        const payload = {
+            orderNo: h.orderNo,
+            orderDate: h.orderDate || new Date().toISOString().slice(0, 19).replace('T', ' '),
+            shipName: h.shipName,
+            shipPhone: h.shipPhone,
+            shipAddress1: h.shipAddress1,
+            shipCity: h.shipCity,
+            shipState: h.shipState,
+            shipCountry: h.shipCountry || 'JP',
+            shipZipCode: h.shipZipCode,
+            salesChannel: h.salesChannel || 'Mercari',
+            shipFrom: h.shipFrom || 'Mercari Lifestyle',
+            orderLines: order.lines,
+            hasOtherLabel: "false"
+        };
+
+        try {
+            const apiRes = await giga.createOrder(payload);
+            console.log(`Order ${orderNo} created. GIGA ID: ${apiRes.data?.orderId}`);
+
+            for (const id of order.ids) {
+                await youge.updateStatus(id, "Processed", `GIGA Created. ID: ${apiRes.data?.orderId}`);
+            }
+            results.success++;
+        } catch (e) {
+            // Idempotency: Handle "Order already exists" (BRD 16.1)
+            if (e.message.includes("exists") || e.message.includes("重复")) {
+                console.log(`Order ${orderNo} skip: already exists in GIGA.`);
+                for (const id of order.ids) {
+                    await youge.updateStatus(id, "Processed", "Order already existed in GIGA.");
+                }
+                results.success++;
+                continue;
+            }
+
+            console.error(`Error processing ${orderNo}: ${e.message}`);
+            results.failed++;
+            results.errors.push(`${orderNo}: ${e.message}`);
+            for (const id of order.ids) {
+                await youge.updateStatus(id, "Error", e.message);
+            }
+        }
+    }
+
+    results.message = results.message || `Processed ${results.success} successfully, ${results.failed} failed.`;
+    return results;
+}
+
+/**
+ * Status Mirroring & Shipment Sync (BRD 18.1 & 13)
+ */
+async function syncDownstream(env) {
+    const youge = new YougeClient(env.YOUGE_APP_TOKEN, env.YOUGE_APP_CODE, env.YOUGE_SCHEMA_CODE, env.YOUGE_ENGINE_CODE, env.YOUGE_BASE_URL);
+    const giga = new GigaClient(env.GIGA_CLIENT_ID, env.GIGA_CLIENT_SECRET, env.GIGA_API_BASE_URL);
+
+    const stats = { checked: 0, updated: 0, failed: 0, errors: [] };
+    const STATUS_MAP = {
+        '1': 'Unpaid', '8': 'Paid', '2': 'Being Processed',
+        '4': 'On Hold', '16': 'Canceled', '32': 'Completed'
+    };
+
+    try {
+        const allRecords = await youge.getRawRecords();
+        const activeRecords = allRecords.filter(r => {
+            const s = r[youge.FIELDS.STATUS];
+            return s === 'Processed' || s === 'Being Processed' || s === 'Paid' || s === 'Unpaid';
+        });
+
+        if (activeRecords.length === 0) return { message: "No active orders to sync status." };
+
+        const orderNoMap = {};
+        for (const r of activeRecords) {
+            const orderNo = r[youge.FIELDS.ORDER_ID];
+            if (!orderNoMap[orderNo]) orderNoMap[orderNo] = [];
+            orderNoMap[orderNo].push(r[youge.FIELDS.ROW_ID]);
+        }
+
+        const orderNos = Object.keys(orderNoMap);
+        stats.checked = orderNos.length;
+
+        // Batch Tracking Update
+        for (let i = 0; i < orderNos.length; i += 20) {
+            const batch = orderNos.slice(i, i + 20);
+            try {
+                const res = await giga.getTrackingInfo(batch);
+                const trackingDatas = res.data || [];
+
+                for (const td of trackingDatas) {
+                    const oids = orderNoMap[td.orderNo] || [];
+                    for (const oid of oids) {
+                        // If we have tracking info, consider it 'Completed' (BRD 13)
+                        if (td.shipTrackInfo?.length > 0) {
+                            const carrier = [...new Set(td.shipTrackInfo.map(t => t.carrierName || 'Unknown'))].join(' / ');
+                            const tracking = td.shipTrackInfo.map(t => `${t.carrierName || 'Unknown'}: ${t.trackingNum}`).join('; ');
+                            await youge.updateShipmentInfo(oid, { carrierName: carrier, trackingNo: tracking });
+                            await youge.updateStatus(oid, 'Completed', `Tracking info synced: ${tracking}`);
+                            stats.updated++;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(`Error in tracking batch: ${e.message}`);
+                let userFriendlyError = e.message;
+                if (e.message.includes('404')) {
+                    userFriendlyError = "System Error: Connection to GIGA Tracking Service failed (404).";
+                }
+
+                for (const orderNo of batch) {
+                    const oids = orderNoMap[orderNo] || [];
+                    for (const oid of oids) {
+                        await youge.updateStatus(oid, 'Error', userFriendlyError);
+                        stats.failed++;
+                        stats.errors.push(`${orderNo}: ${userFriendlyError}`);
+                    }
+                }
+            }
+        }
+        return stats;
+    } catch (e) {
+        return { error: e.message };
+    }
+}
+
+export default {
+    async fetch(request, env) {
+        const url = new URL(request.url);
+
+        try {
+            if (url.pathname === '/console') {
+                return new Response(CONSOLE_HTML, { headers: { 'Content-Type': 'text/html' } });
+            }
+
+            if (url.pathname === '/status') {
+                const youge = new YougeClient(env.YOUGE_APP_TOKEN, env.YOUGE_APP_CODE, env.YOUGE_SCHEMA_CODE, env.YOUGE_ENGINE_CODE, env.YOUGE_BASE_URL);
+                const all = await youge.getRawRecords();
+                return new Response(JSON.stringify({
+                    pending: all.filter(r => r[youge.FIELDS.STATUS] === 'Pending').length,
+                    processed: all.filter(r => r[youge.FIELDS.STATUS] === 'Processed').length,
+                    error: all.filter(r => r[youge.FIELDS.STATUS] === 'Error').length,
+                    completed: all.filter(r => r[youge.FIELDS.STATUS] === 'Completed').length,
+                    total: all.length
+                }), { headers: { 'Content-Type': 'application/json' } });
+            }
+
+            if (url.pathname === '/sync') {
+                const results = await processOrders(request, env);
+                return new Response(JSON.stringify(results, null, 2), { headers: { 'Content-Type': 'application/json' } });
+            }
+
+            if (url.pathname === '/sync-shipment') {
+                const results = await syncDownstream(env);
+                return new Response(JSON.stringify(results, null, 2), { headers: { 'Content-Type': 'application/json' } });
+            }
+
+            if (url.pathname === '/retry') {
+                const orderId = url.searchParams.get('orderId');
+                const youge = new YougeClient(env.YOUGE_APP_TOKEN, env.YOUGE_APP_CODE, env.YOUGE_SCHEMA_CODE, env.YOUGE_ENGINE_CODE, env.YOUGE_BASE_URL);
+                const all = await youge.getRawRecords();
+                const recs = all.filter(r => r[youge.FIELDS.ORDER_ID] === orderId);
+                for (const r of recs) await youge.updateStatus(r[youge.FIELDS.ROW_ID], "Pending", "Manual retry.");
+                return new Response(JSON.stringify({ message: `Retrying order ${orderId}` }), { headers: { 'Content-Type': 'application/json' } });
+            }
+
+            return new Response(`GIGA Sync Worker (V1.1). Access /console for management.`, { status: 200 });
+        } catch (e) {
+            return new Response(JSON.stringify({ error: e.message, stack: e.stack }), { status: 500 });
+        }
+    },
+
+    async scheduled(event, env, ctx) {
+        const hour = new Date(event.scheduledTime).getUTCHours();
+        if (hour === 2 || hour === 5) {
+            ctx.waitUntil(processOrders(null, env));
+        } else if (hour === 9) {
+            ctx.waitUntil(syncDownstream(env));
+        }
+    }
+};
+
+import { GigaClient } from './giga-client.js';
+import { YougeClient } from './youge-client.js';

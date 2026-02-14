@@ -1,0 +1,15 @@
+{
+    "name": "giga-shipment-sync-worker",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "Cloudflare Worker to sync Sanyu shipments to GigaB2B",
+    "main": "src/worker.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "deploy": "wrangler deploy",
+        "deploy:dev": "wrangler deploy --env dev",
+        "deploy:prod": "wrangler deploy --env production"
+    },
+    "author": "",
+    "license": "ISC"
+}

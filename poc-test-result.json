@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-02-11T08:34:48.413Z",
+  "tests": [
+    {
+      "name": "Multi-SKU Order Creation",
+      "status": "PASS",
+      "details": {
+        "orderNo": "order_2JLzLoGcA7XLi4yHh3FAjg-TEST-1770798888413",
+        "response": {
+          "success": true,
+          "code": "200",
+          "data": null,
+          "requestId": "b5a25dc5bbaebcdd",
+          "msg": "success",
+          "subMsg": null,
+          "recommend": "https://www.gigab2b.com/index.php?route=information/open_api/index&doc_id=8"
+        }
+      }
+    }
+  ]
+}

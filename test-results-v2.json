@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-02-11T06:41:54.293Z",
+  "tests": [
+    {
+      "name": "Signature Generation",
+      "status": "PASS",
+      "details": {
+        "clientId": "83142311_JPN_release",
+        "timestamp": "1770792114293",
+        "nonce": "1234567890",
+        "apiPath": "/b2b-overseas-api/v1/buyer/order/dropShip-sync/v1",
+        "signature": "YWRkZTgyYWQzYWUxNTBk..."
+      }
+    },
+    {
+      "name": "Order Creation",
+      "status": "FAIL",
+      "error": "Giga API Error: Undefined error (Code: B11005)",
+      "details": {
+        "orderNo": "TEST-1770792114293",
+        "errorType": "Error"
+      }
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "errors": 0,
+    "success": false
+  }
+}

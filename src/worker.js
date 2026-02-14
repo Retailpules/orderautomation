@@ -114,10 +114,11 @@ async function processOrders(request, env) {
     const allRecords = await youge.getRawRecords();
 
     // Filter "Pending" and "Error" for auto-compensation (BRD 23.2)
-    const pendingRecords = allRecords.filter(r => {
-        const status = r[youge.FIELDS.STATUS];
+    const normalizedPending = allRecords.map(r => youge._mapRecord(r));
+    const pendingRecords = normalizedPending.filter(r => {
+        const status = r.status;
         return status === 'Pending' || status === 'Error';
-    }).map(r => youge._mapRecord(r));
+    });
 
     if (pendingRecords.length === 0) {
         return { success: 0, failed: 0, message: "No pending or error orders to process." };
@@ -209,26 +210,30 @@ async function syncDownstream(env) {
     const youge = new YougeClient(env.YOUGE_APP_TOKEN, env.YOUGE_APP_CODE, env.YOUGE_SCHEMA_CODE, env.YOUGE_ENGINE_CODE, env.YOUGE_BASE_URL);
     const giga = new GigaClient(env.GIGA_CLIENT_ID, env.GIGA_CLIENT_SECRET, env.GIGA_API_BASE_URL);
 
-    const stats = { checked: 0, updated: 0, failed: 0, errors: [] };
-    const STATUS_MAP = {
-        '1': 'Unpaid', '8': 'Paid', '2': 'Being Processed',
-        '4': 'On Hold', '16': 'Canceled', '32': 'Completed'
-    };
-
     try {
         const allRecords = await youge.getRawRecords();
-        const activeRecords = allRecords.filter(r => {
-            const s = r[youge.FIELDS.STATUS];
+        const mappedRecords = allRecords.map(r => youge._mapRecord(r));
+
+        const activeRecords = mappedRecords.filter(r => {
+            const s = r.status;
             return s === 'Processed' || s === 'Being Processed' || s === 'Paid' || s === 'Unpaid';
         });
 
-        if (activeRecords.length === 0) return { message: "No active orders to sync status." };
+        const stats = {
+            fetched: allRecords.length,
+            matched: activeRecords.length,
+            updated: 0,
+            failed: 0,
+            errors: []
+        };
+
+        if (activeRecords.length === 0) return { ...stats, message: "No active orders to sync status." };
 
         const orderNoMap = {};
         for (const r of activeRecords) {
-            const orderNo = r[youge.FIELDS.ORDER_ID];
+            const orderNo = r.orderNo;
             if (!orderNoMap[orderNo]) orderNoMap[orderNo] = [];
-            orderNoMap[orderNo].push(r[youge.FIELDS.ROW_ID]);
+            orderNoMap[orderNo].push(r.id);
         }
 
         const orderNos = Object.keys(orderNoMap);
@@ -308,16 +313,56 @@ export default {
                 return new Response(JSON.stringify(results, null, 2), { headers: { 'Content-Type': 'application/json' } });
             }
 
+            if (url.pathname === '/diag') {
+                const youge = new YougeClient(env.YOUGE_APP_TOKEN, env.YOUGE_APP_CODE, env.YOUGE_SCHEMA_CODE, env.YOUGE_ENGINE_CODE, env.YOUGE_BASE_URL);
+                const results = {
+                    config: {
+                        YOUGE_BASE_URL: env.YOUGE_BASE_URL,
+                        RESOLVED_YOUGE_BASE: youge.baseUrl,
+                        YOUGE_APP_CODE: env.YOUGE_APP_CODE,
+                        YOUGE_SCHEMA_CODE: env.YOUGE_SCHEMA_CODE
+                    },
+                    diagnostics: {}
+                };
+
+                try {
+                    const allRecords = await youge.getRawRecords();
+                    results.diagnostics.totalFetched = allRecords.length;
+                    results.diagnostics.samples = allRecords.slice(0, 5).map(r => {
+                        const mapped = youge._mapRecord(r);
+                        return {
+                            id: mapped.id,
+                            orderNo: mapped.orderNo,
+                            rawStatus: mapped.rawStatus,
+                            normalizedStatus: mapped.status,
+                            carrier: r[youge.FIELDS.CARRIER],
+                            tracking: r[youge.FIELDS.TRACKING]
+                        };
+                    });
+                } catch (e) {
+                    results.diagnostics.error = e.message;
+                    results.diagnostics.stack = e.stack;
+                }
+
+                return new Response(JSON.stringify(results, null, 2), { headers: { 'Content-Type': 'application/json' } });
+            }
+
             if (url.pathname === '/retry') {
                 const orderId = url.searchParams.get('orderId');
                 const youge = new YougeClient(env.YOUGE_APP_TOKEN, env.YOUGE_APP_CODE, env.YOUGE_SCHEMA_CODE, env.YOUGE_ENGINE_CODE, env.YOUGE_BASE_URL);
                 const all = await youge.getRawRecords();
-                const recs = all.filter(r => r[youge.FIELDS.ORDER_ID] === orderId);
-                for (const r of recs) await youge.updateStatus(r[youge.FIELDS.ROW_ID], "Pending", "Manual retry.");
+                const recs = all.filter(r => {
+                    const mapped = youge._mapRecord(r);
+                    return mapped.orderNo === orderId;
+                });
+                for (const r of recs) {
+                    const id = r[youge.FIELDS.ROW_ID];
+                    await youge.updateStatus(id, "Pending", "Manual retry.");
+                }
                 return new Response(JSON.stringify({ message: `Retrying order ${orderId}` }), { headers: { 'Content-Type': 'application/json' } });
             }
 
-            return new Response(`GIGA Sync Worker (V1.1). Access /console for management.`, { status: 200 });
+            return new Response(`GIGA Sync Worker (V1.2). Access /console for management.`, { status: 200 });
         } catch (e) {
             return new Response(JSON.stringify({ error: e.message, stack: e.stack }), { status: 500 });
         }

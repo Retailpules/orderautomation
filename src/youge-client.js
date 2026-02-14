@@ -10,8 +10,13 @@ export class YougeClient {
         this.appCode = appCode;
         this.schemaCode = schemaCode;
         this.engineCode = engineCode;
-        // Standardize Base URL to include /openapi as per official documentation
-        this.baseUrl = baseUrl.replace(/\/$/, '') + '/openapi';
+
+        // Fix: Avoid double /openapi if already present
+        let base = baseUrl.replace(/\/$/, '');
+        if (!base.endsWith('/openapi')) {
+            base += '/openapi';
+        }
+        this.baseUrl = base;
 
         // Field Mappings
         this.FIELDS = {
@@ -138,8 +143,26 @@ export class YougeClient {
             orderDetailNo: parseInt(r[this.FIELDS.LINE_NO] || '0', 10),
             salesChannel: r[this.FIELDS.SALES_CHANNEL] || 'Other',
             shipFrom: r[this.FIELDS.SHIP_FROM] || 'Mercari Lifestyle',
-            orderDate: r[this.FIELDS.ORDER_DATE]
+            orderDate: r[this.FIELDS.ORDER_DATE],
+            rawStatus: r[this.FIELDS.STATUS], // Keep raw for diagnostics
+            status: this._normalizeStatus(r[this.FIELDS.STATUS])
         };
+    }
+
+    /**
+     * Normalizes complex Youge status types (objects/arrays) to a simple string
+     */
+    _normalizeStatus(val) {
+        if (!val) return "";
+        if (typeof val === 'string') return val;
+        if (Array.isArray(val)) {
+            const first = val[0];
+            return first ? (first.name || first.value || JSON.stringify(first)) : "";
+        }
+        if (typeof val === 'object') {
+            return val.name || val.value || JSON.stringify(val);
+        }
+        return String(val);
     }
 
     /**
@@ -152,11 +175,16 @@ export class YougeClient {
             [this.FIELDS.COMMENTS]: comment
         };
 
-        await fetch(url, {
+        const response = await fetch(url, {
             method: 'PATCH',
             headers: this.getHeaders(),
             body: JSON.stringify(payload)
         });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Youge Status Update Fail [ID: ${objectId}, Status: ${status}]: ${response.status} - ${errorText}`);
+        }
     }
 
     /**

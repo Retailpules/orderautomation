@@ -137,6 +137,7 @@ graph LR
 - **FR-022**: System SHALL validate required fields before creating orders
 - **FR-023**: System SHALL skip orders with missing critical data (Order ID, SKU, shipping address)
 - **FR-024**: System SHALL log validation errors for manual review
+- **FR-036**: System SHALL translate technical API errors (e.g., 404, 403, 500) into business-friendly messages for end-users in the "Order Comments" field
 
 ### 3.4 Logging & Monitoring
 
@@ -371,6 +372,10 @@ Integration testing for the Japanese market confirmed:
 | YOUGE_ENGINE_CODE | String | Youge Engine Code | c00000000000s4-0 |
 | YOUGE_BASE_URL | String | Youge API Base URL | https://sanyu.cloud |
 
+#### 7.1.3 Configuration Stability
+- **NFR-018**: Configuration variables MUST be defined at the top-level `[vars]` in `wrangler.toml` to ensure availability across all default deployment scenarios.
+- **NFR-019**: API clients SHALL include internal checks to verify all required configuration is present before execution, throwing clear initialization errors if missing.
+
 ### 7.2 Deployment Configuration
 
 #### 7.2.1 Cloudflare Worker Settings
@@ -559,6 +564,7 @@ Before production deployment, the following validations MUST be completed:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-02-11 | AI Assistant | Initial BRD creation |
+| 1.1 | 2026-02-14 | AI Assistant | Fixed tracking endpoint logic, added business-friendly error requirements, and configuration safety guards. |
 
 ---
 

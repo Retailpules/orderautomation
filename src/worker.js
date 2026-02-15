@@ -240,7 +240,15 @@ async function syncDownstream(env) {
         stats.checked = orderNos.length;
 
         // Batch Tracking Update
+        const startTime = Date.now();
         for (let i = 0; i < orderNos.length; i += 20) {
+            // Constraint: Check 40s limit (Safe buffer for 30s-60s limit workers)
+            if (Date.now() - startTime > 40000) {
+                console.warn("Sync Downstream timed out (40s limit reached). Stopping batch.");
+                stats.message = "Partial execution. Stopped at 40s limit.";
+                break;
+            }
+
             const batch = orderNos.slice(i, i + 20);
             try {
                 const res = await giga.getTrackingInfo(batch);
@@ -369,10 +377,20 @@ export default {
     },
 
     async scheduled(event, env, ctx) {
-        const hour = new Date(event.scheduledTime).getUTCHours();
+        const scheduledTime = new Date(event.scheduledTime);
+        const hour = scheduledTime.getUTCHours();
+        console.log(`Scheduled Event Triggered: ${scheduledTime.toISOString()} (UTC Hour: ${hour})`);
+
+        // Safety: Log if the hour is unexpected
+        if (![2, 5, 9].includes(hour)) {
+            console.warn(`Warning: Scheduled event fired at unexpected hour: ${hour}`);
+        }
+
         if (hour === 2 || hour === 5) {
+            console.log("Executing Order Sync (processOrders)");
             ctx.waitUntil(processOrders(null, env));
         } else if (hour === 9) {
+            console.log("Executing Tracking/Shipment Sync (syncDownstream)");
             ctx.waitUntil(syncDownstream(env));
         }
     }

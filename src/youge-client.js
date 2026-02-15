@@ -141,18 +141,18 @@ export class YougeClient {
             qty: parseInt(r[this.FIELDS.QTY] || '0', 10),
             itemPrice: parseFloat(r[this.FIELDS.ITEM_PRICE] || '0'),
             orderDetailNo: parseInt(r[this.FIELDS.LINE_NO] || '0', 10),
-            salesChannel: r[this.FIELDS.SALES_CHANNEL] || 'Other',
-            shipFrom: r[this.FIELDS.SHIP_FROM] || 'Mercari Lifestyle',
+            salesChannel: this._normalizeField(r[this.FIELDS.SALES_CHANNEL]) || 'Other',
+            shipFrom: this._normalizeField(r[this.FIELDS.SHIP_FROM]) || 'Mercari Lifestyle',
             orderDate: r[this.FIELDS.ORDER_DATE],
             rawStatus: r[this.FIELDS.STATUS], // Keep raw for diagnostics
-            status: this._normalizeStatus(r[this.FIELDS.STATUS])
+            status: this._normalizeField(r[this.FIELDS.STATUS])
         };
     }
 
     /**
-     * Normalizes complex Youge status types (objects/arrays) to a simple string
+     * Normalizes complex Youge field types (objects/arrays) to a simple string
      */
-    _normalizeStatus(val) {
+    _normalizeField(val) {
         if (!val) return "";
         if (typeof val === 'string') return val;
         if (Array.isArray(val)) {

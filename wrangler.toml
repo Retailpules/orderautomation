@@ -2,6 +2,9 @@ name = "giga-shipment-sync-worker-production"
 main = "src/worker.js"
 compatibility_date = "2026-02-11"
 
+[triggers]
+crons = ["0 2,5,9 * * *"]
+
 [vars]
 GIGA_CLIENT_ID = "83142311_JPN_release"
 GIGA_API_BASE_URL = "https://openapi.gigab2b.com"

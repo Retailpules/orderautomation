@@ -18,7 +18,7 @@ The system automatically transfers "Pending" orders from the Sanyu Youge ERP int
 ## 2. The Web Console
 The Web Console is your central hub for monitoring and manual control.
 
-**URL:** [https://giga-shipment-sync-worker-production.jim-yang-3c5.workers.dev/console](https://giga-shipment-sync-worker-production.jim-yang-3c5.workers.dev/console)
+**URL:** [https://giga-shipment-sync-worker.jim-yang-3c5.workers.dev/console](https://giga-shipment-sync-worker.jim-yang-3c5.workers.dev/console)
 > [!NOTE]
 > The default subdomain for this account is `jim-yang-3c5.workers.dev`. If you use a custom domain later, please update this URL.
 

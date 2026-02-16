@@ -31,7 +31,7 @@ const CONSOLE_HTML = `
     <div class="container">
         <header>
             <h1>GIGA Sync Console</h1>
-            <span class="badge">V1.1 Patch</span>
+            <span class="badge">V1.3</span>
         </header>
         
         <div class="stats">
@@ -361,11 +361,12 @@ export default {
             if (url.pathname === '/status') {
                 const youge = new YougeClient(env.YOUGE_APP_TOKEN, env.YOUGE_APP_CODE, env.YOUGE_SCHEMA_CODE, env.YOUGE_ENGINE_CODE, env.YOUGE_BASE_URL);
                 const all = await youge.getRawRecords();
+                const mapped = all.map(r => youge._mapRecord(r));
                 return new Response(JSON.stringify({
-                    pending: all.filter(r => r[youge.FIELDS.STATUS] === 'Pending').length,
-                    processed: all.filter(r => r[youge.FIELDS.STATUS] === 'Processed').length,
-                    error: all.filter(r => r[youge.FIELDS.STATUS] === 'Error').length,
-                    completed: all.filter(r => r[youge.FIELDS.STATUS] === 'Completed').length,
+                    pending: mapped.filter(r => r.status === 'Pending').length,
+                    processed: mapped.filter(r => r.status === 'Processed').length,
+                    error: mapped.filter(r => r.status === 'Error').length,
+                    completed: mapped.filter(r => r.status === 'Completed').length,
                     total: all.length
                 }), { headers: { 'Content-Type': 'application/json' } });
             }
@@ -395,17 +396,28 @@ export default {
                 try {
                     const allRecords = await youge.getRawRecords();
                     results.diagnostics.totalFetched = allRecords.length;
-                    results.diagnostics.samples = allRecords.slice(0, 5).map(r => {
+
+                    // Show ALL records with raw vs normalized status
+                    results.diagnostics.allRecords = allRecords.map(r => {
                         const mapped = youge._mapRecord(r);
                         return {
                             id: mapped.id,
                             orderNo: mapped.orderNo,
                             rawStatus: mapped.rawStatus,
+                            rawStatusType: typeof mapped.rawStatus + (Array.isArray(mapped.rawStatus) ? '[]' : ''),
                             normalizedStatus: mapped.status,
                             carrier: r[youge.FIELDS.CARRIER],
                             tracking: r[youge.FIELDS.TRACKING]
                         };
                     });
+
+                    // Status distribution
+                    const statusCounts = {};
+                    results.diagnostics.allRecords.forEach(r => {
+                        const s = r.normalizedStatus || '(empty)';
+                        statusCounts[s] = (statusCounts[s] || 0) + 1;
+                    });
+                    results.diagnostics.statusDistribution = statusCounts;
                 } catch (e) {
                     results.diagnostics.error = e.message;
                     results.diagnostics.stack = e.stack;
@@ -429,7 +441,7 @@ export default {
                 return new Response(JSON.stringify({ message: `Retrying order ${orderId}` }), { headers: { 'Content-Type': 'application/json' } });
             }
 
-            return new Response(`GIGA Sync Worker (V1.2). Access /console for management.`, { status: 200 });
+            return new Response(`GIGA Sync Worker (V1.3). Access /console for management.`, { status: 200 });
         } catch (e) {
             return new Response(JSON.stringify({ error: e.message, stack: e.stack }), { status: 500 });
         }

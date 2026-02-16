@@ -145,24 +145,28 @@ export class YougeClient {
             shipFrom: this._normalizeField(r[this.FIELDS.SHIP_FROM]) || 'Mercari Lifestyle',
             orderDate: r[this.FIELDS.ORDER_DATE],
             rawStatus: r[this.FIELDS.STATUS], // Keep raw for diagnostics
-            status: this._normalizeField(r[this.FIELDS.STATUS])
+            status: this._normalizeField(r[this.FIELDS.STATUS]) || 'Pending'
         };
     }
 
     /**
-     * Normalizes complex Youge field types (objects/arrays) to a simple string
+     * Normalizes complex Youge field types (objects/arrays) to a simple string.
+     * Youge/H3 may return dropdown values as plain strings, string arrays,
+     * object arrays [{name:...}], or objects {name:...}.
      */
     _normalizeField(val) {
-        if (!val) return "";
-        if (typeof val === 'string') return val;
+        if (val === null || val === undefined || val === '') return '';
+        if (typeof val === 'string') return val.trim();
         if (Array.isArray(val)) {
             const first = val[0];
-            return first ? (first.name || first.value || JSON.stringify(first)) : "";
+            if (!first) return '';
+            if (typeof first === 'string') return first.trim();
+            return (first.name || first.value || JSON.stringify(first)).trim();
         }
         if (typeof val === 'object') {
-            return val.name || val.value || JSON.stringify(val);
+            return (val.name || val.value || JSON.stringify(val)).trim();
         }
-        return String(val);
+        return String(val).trim();
     }
 
     /**

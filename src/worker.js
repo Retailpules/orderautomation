@@ -106,6 +106,52 @@ const CONSOLE_HTML = `
 </html>
 `;
 
+/**
+ * Validates an assembled order payload before submission to GigaB2B.
+ * Returns an array of validation error strings. Empty array = valid.
+ * (BRD FR-022, FR-023, FR-024)
+ */
+function validateOrder(payload) {
+    const errors = [];
+
+    if (!payload.orderNo || !payload.orderNo.trim()) {
+        errors.push('orderNo is missing or empty');
+    }
+    if (!payload.shipName || !payload.shipName.trim()) {
+        errors.push('shipName is missing or empty');
+    }
+    if (!payload.shipAddress1 || !payload.shipAddress1.trim()) {
+        errors.push('shipAddress1 is missing or empty');
+    }
+    if (!payload.shipCity || !payload.shipCity.trim()) {
+        errors.push('shipCity is missing or empty');
+    }
+    if (!payload.shipZipCode || !payload.shipZipCode.trim()) {
+        errors.push('shipZipCode is missing or empty');
+    }
+
+    if (!payload.orderLines || payload.orderLines.length === 0) {
+        errors.push('Order has no line items');
+    } else {
+        for (let i = 0; i < payload.orderLines.length; i++) {
+            const line = payload.orderLines[i];
+            const lineLabel = `orderLine[${i}]`;
+
+            if (!line.sku || !line.sku.trim()) {
+                errors.push(`${lineLabel}: sku is missing or empty`);
+            }
+            if (!line.qty || line.qty <= 0) {
+                errors.push(`${lineLabel}: qty must be > 0 (got ${line.qty})`);
+            }
+            if (!line.itemPrice || line.itemPrice <= 0) {
+                errors.push(`${lineLabel}: itemPrice must be > 0 (got ${line.itemPrice})`);
+            }
+        }
+    }
+
+    return errors;
+}
+
 async function processOrders(request, env) {
     const startTime = Date.now();
     const giga = new GigaClient(env.GIGA_CLIENT_ID, env.GIGA_CLIENT_SECRET, env.GIGA_API_BASE_URL);
@@ -126,7 +172,7 @@ async function processOrders(request, env) {
 
     // Constraint: Limit to 20 orders per run (BRD 21.1)
     const uniqueOrderNos = [...new Set(pendingRecords.map(r => r.orderNo))].slice(0, 20);
-    const results = { success: 0, failed: 0, errors: [], message: "" };
+    const results = { success: 0, failed: 0, skipped: 0, errors: [], message: "" };
 
     // Grouping logic
     const ordersMap = {};
@@ -140,7 +186,7 @@ async function processOrders(request, env) {
             sku: rec.sku,
             qty: rec.qty,
             orderDetailNo: rec.orderDetailNo || (ordersMap[rec.orderNo].lines.length + 1),
-            itemPrice: rec.itemPrice || 0,
+            itemPrice: rec.itemPrice || null,
             currency: 'JPY'
         });
         ordersMap[rec.orderNo].ids.push(rec.id);
@@ -171,6 +217,19 @@ async function processOrders(request, env) {
             hasOtherLabel: "false"
         };
 
+        // Pre-submission validation (BRD FR-022, FR-023, FR-024)
+        const validationErrors = validateOrder(payload);
+        if (validationErrors.length > 0) {
+            const errorMsg = `Validation failed: ${validationErrors.join('; ')}`;
+            console.warn(`Skipping order ${orderNo}: ${errorMsg}`);
+            results.skipped++;
+            results.errors.push(`${orderNo}: ${errorMsg}`);
+            for (const id of order.ids) {
+                await youge.updateStatus(id, "Error", errorMsg);
+            }
+            continue;
+        }
+
         try {
             const apiRes = await giga.createOrder(payload);
             console.log(`Order ${orderNo} created. GIGA ID: ${apiRes.data?.orderId}`);
@@ -199,7 +258,7 @@ async function processOrders(request, env) {
         }
     }
 
-    results.message = results.message || `Processed ${results.success} successfully, ${results.failed} failed.`;
+    results.message = results.message || `Processed ${results.success} successfully, ${results.failed} failed, ${results.skipped} skipped (validation).`;
     return results;
 }
 
